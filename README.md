@@ -10,14 +10,17 @@ Our results highlight the relevance of Protista and Fungi as integral members of
 First, we analysed the eukaryotic composition across all samples, from both sets of data.
 
 `bin/Rmarkdown scr/combined/script1.Rmd`
+
 `bin/Rmarkdown scr/combined/script2.Rmd`
 
 We then dive into the analysis of the effect of social group membership.
 
 `bin/Rmarkdown scr/social_group/script1.Rmd`
+
 `bin/Rmarkdown scr/social_group/script2.Rmd`
 
 Finally, we investigate the effect of seasonality on the eukaryotic microbiome composition. 
 
 `bin/Rmarkdown scr/season/script1.Rmd`
+
 `bin/Rmarkdown scr/season/script2.Rmd`
