@@ -1,0 +1,126 @@
+---
+title: "Heatmap of the Eukaryotes composition in baboon stool samples - Social group analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
+options(stringsAsFactors = FALSE)
+
+```
+
+
+#Prepare environment
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(stringr)
+library(circlize)
+library(devtools)
+library(ComplexHeatmap)
+library(dendsort)
+
+```
+
+#Load tables
+```{r}
+
+#load taxa profile 
+euks.social <- read_delim("data/Eukdetect_gutprotist_prevdata.csv", delim = ',')
+
+#load metadata
+euks.social.metadata <- read_delim("data/metadata_social_group.csv", delim = ',')
+euks.social.metadata.clean <- euks.social.metadata %>% 
+  select(Sample_ID, `Social_group`, Age_interval, Sex)
+  
+```
+
+#Clean input tables
+```{r}
+
+euks.social.clean.rowSums <- as.data.frame(euks.social.clean %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="Sample_ID") %>% 
+  rowSums()) 
+
+colnames(euks.social.clean.rowSums)[1] = "cum_detections"
+
+#define top species to show in heatmap
+samples_to_keep <- euks.social.clean.rowSums %>% 
+  filter(cum_detections>1) 
+
+samples_to_keep$sample <- rownames(samples_to_keep)
+
+samples_to_keep.list <- c(samples_to_keep %>% 
+                                  select(sample) %>% pull())
+
+#filter for top species
+euks.social.clean.keep <- euks.social.clean %>% 
+ filter(Sample_ID %in% samples_to_keep.list) %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="Sample_ID") 
+
+euks.social.clean.keep.t <- as.data.frame(t(euks.social.clean.keep))
+
+#get metadata for selected taxa
+colnames_ordered <- rownames_to_column(as.data.frame(t(euks.social.clean.keep.t))) %>% 
+  select(rowname)
+
+colnames_ordered.metadata <- left_join(colnames_ordered, euks.social.metadata.clean, by=c("rowname"="Sample_ID"))
+```
+
+#create heatmap annotation
+```{r}
+
+ann.social <- data.frame(colnames_ordered.metadata$`Social_group`,
+                        colnames_ordered.metadata$`Age_interval`,
+                        colnames_ordered.metadata$`Sex`)
+
+colnames(ann.social) <- c('Social_group','Age_interval','Sex')
+
+colours.social <- list('Social_group' = c('Mica' = "darkorange2", 'Viola' = "purple3"),
+  'Age_interval' = c('1-5yrs' = '#f2e6ef', '5-10yrs' = '#de9ecd',  '10-15yrs' = '#ad3691', 'over 15yrs' = '#630a4c'),
+  'Sex' = c('M' = 'grey', 'F' = 'grey20'))
+
+colAnn.social <- HeatmapAnnotation(df = ann.social,
+  which = 'col',
+  col = colours.social,
+  annotation_width = unit(c(0.1, 0.1), 'cm'),
+  gap = unit(0.5, 'mm'))
+
+
+col_fun = colorRamp2(c(0, 1), 
+                     c("white","navy"))
+
+
+euks.social.mat <- as.matrix(euks.social.clean2.t)
+
+#order taxa and samples
+row_dend.social = dendsort(hclust(dist(euks.social.mat)))
+col_dend.social = dendsort(hclust(dist(t(euks.social.mat))))
+
+```
+
+#plot heatmap
+```{r}
+
+htm.euks.social <- Heatmap(euks.social.mat, 
+        name = "Abundance", 
+        cluster_columns = col_dend.social,
+        clustering_distance_rows = "euclidean", 
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE, 
+        show_row_dend = FALSE, 
+        col = col_fun, 
+        row_names_gp = gpar(fontsize = 8),
+        top_annotation=colAnn.social, 
+        column_dend_height = unit(5, "mm"))
+
+#save figure
+pdf(file=paste0("figures/social_group/heatmap_euks_social.pdf"), width=7, height=3)
+htm.euks.social
+dev.off()
+
+```
