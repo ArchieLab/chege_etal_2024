@@ -11,14 +11,19 @@ First, we analysed the **eukaryotic composition across all samples**, from both 
 
 `bin/Rmarkdown scr/combined/Heatmap_merged.Rmd`
 
-We then dive into the analysis of the effect of **social group membership**.
+We then investigated the effect of **social group membership** on the Amboseli baboons gut eukaryotic composition:
 
 `bin/Rmarkdown scr/social_group/Heatmap_socialGroup.Rmd`
 
 `bin/Rmarkdown scr/social_group/social_group_analysis.Rmd`
 
-Finally, we investigate the effect of **seasonality** on the eukaryotic microbiome composition. 
+Finally, we assessed the impact of **seasonality** on the eukaryotic gut microbiome composition. 
 
 `bin/Rmarkdown scr/season/Heatmap_season.Rmd`
 
 `bin/Rmarkdown scr/season/season_analysis.Rmd`
+
+# Notes
+R version used: v4.3.3. 
+Raw data is available on NCBI under the accession BioProject IDs: PRJNA271618 (Tung et al. 2015) and XX (novel data presented in this study).
+For any information or request, please contact the corresponding author: earchie@nd.edu.
