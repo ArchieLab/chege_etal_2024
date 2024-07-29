@@ -1,0 +1,129 @@
+---
+title: "Eukaryotes composition - Heatmap both datasets"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
+options(stringsAsFactors = FALSE)
+
+```
+
+
+#Prepare environment
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(stringr)
+library(circlize)
+library(devtools)
+library(ComplexHeatmap)
+library(dendsort)
+
+```
+
+#Load tables
+```{r}
+
+#load taxonomic profiles
+euks.merged <- read_delim("data/merged_profiles.csv", delim = ',')
+
+#load metadata table
+euks.merged.metadata <- read_delim("metadata_merged.csv", delim = ',')
+euks.merged.metadata.clean <- euks.merged.metadata %>% 
+  select(Sample_ID, Study, `Social_group`, Season, Age_interval, Sex)
+  
+```
+
+#Clean input tables
+```{r}
+
+euks.merged.rowSums <- as.data.frame(euks.merged %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="Sample_ID") %>% 
+  rowSums()) 
+
+colnames(euks.merged.rowSums)[1] = "cum_detections"
+
+#define top species to show in the heatmap
+samples_to_keep <- euks.merged.rowSums %>% 
+  filter(cum_detections>1) 
+
+samples_to_keep$sample <- rownames(samples_to_keep)
+
+samples_to_keep.list <- c(samples_to_keep %>% 
+                                  select(sample) %>% pull())
+
+#keep only top species
+euks.merged.keep <- euks.merged %>% 
+ filter(Sample_ID %in% samples_to_keep.list) %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="Sample_ID") 
+
+euks.merged.keep.t <- as.data.frame(t(euks.merged.keep))
+
+#get metadata for filtered species
+colnames_ordered <- rownames_to_column(as.data.frame(t(euks.merged.keep.t))) %>% 
+  select(rowname)
+
+colnames_ordered.metadata <- left_join(colnames_ordered, euks.merged.metadata.clean, by=c("rowname"="Sample_ID"))
+
+```
+
+#Create heatmap annotation
+```{r}
+
+ann.merged <- data.frame(colnames_ordered.metadata$`Study`,
+                         colnames_ordered.metadata$`Social_group`,
+                         colnames_ordered.metadata$`Season`,
+                         colnames_ordered.metadata$`Age_interval`,
+                         colnames_ordered.metadata$`Sex`)
+
+colnames(ann.merged) <- c('Study', 'Social_group','Season', 'Age_interval','Sex')
+
+colours.merged <- list('Study' = c('Tung_2015' = "firebrick", 'This study' = "darkslateblue"),
+                       'Social_group' = c('Mica' = "darkorange2", 'Viola' = "purple3"),
+                       'Season' = c('dry' = "goldenrod1", 'wet' = "cornflowerblue"),
+                       'Age_interval' = c('1-5yrs' = '#f2e6ef', '5-10yrs' = '#de9ecd',  '10-15yrs' = '#ad3691', 'over 15yrs' = '#630a4c'),
+                       'Sex' = c('M' = 'grey', 'F' = 'grey20'))
+
+colAnn.merged <- HeatmapAnnotation(df = ann.merged,
+  which = 'col',
+  col = colours.merged,
+  annotation_width = unit(c(0.1, 0.1), 'cm'),
+  gap = unit(0.5, 'mm'))
+
+col_fun = colorRamp2(c(0, 1), 
+                     c("white","navy"))
+
+euks.merged.mat <- as.matrix(euks.merged.clean2.t)
+
+#samples and taxa clustering
+row_dend.merged = dendsort(hclust(dist(euks.merged.mat)))
+col_dend.merged = dendsort(hclust(dist(t(euks.merged.mat))))
+
+```
+
+#Plot heatmap
+```{r}
+
+htm.euks.merged <- Heatmap(euks.merged.mat, 
+        name = "Abundance", 
+        cluster_columns = col_dend.merged,
+        clustering_distance_rows = "euclidean", 
+        clustering_distance_columns = "euclidean",
+        show_column_names = FALSE, 
+        show_row_dend = FALSE, 
+        col = col_fun, 
+        row_names_gp = gpar(fontsize = 8),
+        top_annotation=colAnn.merged, 
+        column_dend_height = unit(5, "mm"))
+
+#save figure
+pdf(file=paste0("figures/combined/heatmap_euks_merged.pdf"), width=10, height=5)
+htm.euks.merged
+dev.off()
+
+```
