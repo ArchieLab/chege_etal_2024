@@ -1,0 +1,206 @@
+---
+title: "Seasonal analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+
+```
+
+
+#prepare envirnment
+```{r}
+
+library(vegan)
+library(tidyverse)
+library(ggplot2) 
+library(ggrepel)
+library(dplyr)
+library(ggpubr)
+
+```
+
+
+#Load data and metadata
+```{r}
+
+euks.seasonal <- read_delim("data/baboon_seasonaldata.csv", delim = ',')
+euks.seasonal.metadata <- read_delim("data/SeasonalSamples_metadata.csv", delim = ',')
+
+#merge taxa and metadata files
+season.merged_file <- left_join(euks.seasonal, euks.seasonal.metadata, by=c("Sample_ID"="Sample_ID"))
+
+```
+
+#Alpha Diversity analysis Simpson
+```{r}
+
+euks.seasonal.clean <- euks.seasonal %>% 
+  column_to_rownames("Sample_ID")
+
+# Simpson Diversity Index
+simpson_table <- as.data.frame(diversity(euks.seasonal.clean, index = "simpson")) %>%
+  mutate(simpson_diversity=`diversity(euks.seasonal.clean, index = "simpson")`) %>%
+  select(simpson_diversity)
+
+simpson_table.seasonal.meta <- left_join(simpson_table %>% rownames_to_column("Sample_ID"), 
+                                         euks.seasonal.metadata %>% select(Sample_ID, Season))
+
+# Boxplot 
+simpson.plot <- ggplot(simpson_table.seasonal.meta, aes(x = Season, y = simpson_diversity, fill= Season)) +
+  geom_boxplot(alpha = 0.9, outlier.size = -1) +
+  labs(title = "Simpson Diversity Index Comparison",
+       y = "Simpson Diversity Index") +
+  theme_minimal()+
+  scale_fill_manual(values=c("#FFC300", "#1A67DD"))+
+  #wilcoxon
+ stat_compare_means(aes(group=Season), method="wilcox.test")
+
+#save plot
+pdf(file=paste0("figures/season/simpson_season.pdf"), width = 4, height=4)
+simpson.plot
+dev.off()
+
+```
+
+#Taxa presence analysis
+```{r}
+
+# Pivot the seasonal data to long format
+season_file.long <- euks.seasonal %>%
+  pivot_longer(
+    cols=-Sample_ID,
+    names_to="species",
+    values_to="presence"
+  )
+
+# add season information
+season_file.long.meta <- left_join(season_file.long, euks.seasonal.metadata %>% select(Sample_ID, Season))
+
+# Count the occurrences of each species in each sample
+season_file.long.meta.counts <- season_file.long.meta %>%
+  filter(presence=="1") %>%
+  group_by(Sample_ID, Season) %>%
+  summarise(n_euk=n())
+
+# Calculate the occurrences of each number of eukaryotes across seasons
+occurrences <- season_file.long.meta.counts %>%
+  ungroup()%>%
+  group_by(Season, n_euk) %>%
+  summarise(n_samples=n())
+
+# get n samples from each season
+n_samples_wet <- dim(season.merged_file %>%
+ select(Season)%>%
+  filter(Season=="wet"))[1]-1
+
+n_samples_dry <- dim(season.merged_file %>%
+ select(Season)%>%
+  filter(Season=="dry"))[1]
+
+# Calculate percentages
+occurrences.perc <- occurrences %>%
+  mutate(total=ifelse(Season=="dry", n_samples_dry, n_samples_wet)) %>%
+  mutate(perc=n_samples*100/total)
+
+# Plot the stacked bar plot with wet and dry seasons side by side
+perc.plot <- ggplot(occurrences.perc, aes(x=Season, y =perc, fill=n_euk))+
+  geom_bar(position="stack", stat="identity")+
+  theme_bw()+
+  scale_fill_continuous(type="viridis")+
+  labs(title = "N. eukaryotes per sample", x = "Season", y = "Percentage of Samples")
+
+#save plot
+pdf(file=paste0("figures/season/stacked_bar_nEuk_perSampleSeason.pdf"), width = 3, height=3.5)
+perc.plot
+dev.off()
+
+```
+
+#Eukaryotic composition divided by season
+```{r}
+
+season_file.long.present <- season_file.long.meta %>%
+  filter(presence=="1") %>%
+  select(Season, species)
+
+season_file.long.present.perc <- season_file.long.present %>%
+  group_by(Season, species)%>%
+  summarise(n_occurrences=n()) %>%
+  mutate(total=ifelse(Season=="dry", n_samples_dry, n_samples_wet),
+                      perc=n_occurrences*100/total)
+
+# ordered barplot for Eukaryotic taxa counts across samples
+euk.bar.seasonplot <- ggplot(season_file.long.present.perc, aes(x=reorder(species, perc), y=perc, fill=Season))+
+  geom_bar(position=position_dodge(preserve="single"), stat='identity')+
+  theme_bw()+
+  scale_fill_manual(values=c("#FFC300", "#1A67DD"), drop=FALSE)+
+  labs(title = "% of euk species per season", 
+       x = "Season", y = "Percentage of samples") +
+  ylim(0,100)+
+  coord_flip()
+
+#save plot
+pdf(file=paste0("figures/season/grouped_bar_perc_season_perSpecies.pdf"), width = 8.4, height=3.5)
+euk.bar.seasonplot
+dev.off()
+
+```
+
+##NMDS
+```{r}
+
+# Filter out samples with no species
+samples_with_species <- euks.seasonal.clean %>%
+  filter(rowSums(euks.seasonal.clean) > 0)
+
+# Perform NMDS
+nmds_result_filtered <- metaMDS(samples_with_species, dist = "bray")
+nmds_scores <- scores(nmds_result_filtered, display = "sites")
+
+# select NMDS columns
+nmds_df <- data.frame(
+  Sample_ID = rownames(nmds_scores),
+  NMDS1 = nmds_scores[, 1],  
+  NMDS2 = nmds_scores[, 2]  
+)
+
+# add season information
+nmds_df.meta <- left_join(nmds_df, euks.seasonal.metadata %>% select(Sample_ID, Season))
+
+# custom color palette
+pal <- c("#FFC300", "#1A67DD")
+
+# Plot 
+plot_nmds <- ggplot(nmds_df.meta, aes(x = NMDS1, y = NMDS2, color = Season)) +
+  geom_point(size = 3, alpha = 0.8) +
+  scale_color_manual(values = pal) +
+  stat_ellipse(linetype = 2, size = 1) +
+  labs(title = "NMDS") +
+  theme_minimal()
+
+#save plot
+pdf(file=paste0("figures/season/nmds_bray_season.pdf"), width = 6, height=4)
+plot_nmds
+dev.off()
+
+```
+
+
+#PERMANOVA Test
+```{r}
+
+# Assuming you calculated Bray-Curtis dissimilarity
+bray_curtis_dist <- vegdist(samples_with_species[, 4:20], method = "bray")
+
+# Perform PERMANOVA
+permanova_result <- adonis(bray_curtis_dist ~ season.x + age + sex, data = samples_with_species)
+
+# Display PERMANOVA results
+permanova_table <- as.data.frame(permanova_result$aov.tab)
+
+```
+
