@@ -1,0 +1,196 @@
+---
+title: "Social group analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+
+```
+
+#prepare environment
+```{r}
+
+library(vegan)
+library(tidyverse)
+library(ggplot2) 
+library(dplyr)
+library(ggpubr)
+
+```
+
+#load data and metadata
+```{r}
+
+euks.social <- read_delim("data/Eukdetect_gutprotist_prevdata.csv", delim = ',')
+euks.social.metadata <- read_delim("data/metadata_social_group.csv", delim = ',')
+
+```
+
+#Alpha Diversity analysis - Simpson
+```{r}
+
+euks.social.clean <- euks.social %>% 
+  column_to_rownames("Sample_ID")
+   
+# Simpson Diversity Index
+simpson_table <- as.data.frame(diversity(euks.social.clean, index = "simpson")) %>%
+  mutate(simpson_diversity=`diversity(euks.social.clean, index = "simpson")`) %>%
+  select(simpson_diversity) %>% 
+  rownames_to_column() %>% 
+  rename_with(.cols = 1, ~"Sample_ID")
+
+simpson_table.social.meta <- left_join(simpson_table, euks.social.metadata %>% select(Sample_ID, Social_group))
+
+# Boxplot
+simpson.plot <- ggplot(simpson_table.social.meta, 
+       aes(x = Social_group, y = simpson_diversity, fill= Social_group)) +
+  geom_boxplot(alpha = 0.7, outlier.size = -1) +
+  labs(title = "Simpson Diversity Index Comparison",
+       y = "Simpson Diversity Index") +
+  theme_minimal()+
+  scale_fill_manual(values=c("darkorange", "#6A27E1"))+
+  #wilcoxon
+  stat_compare_means(aes(group=Social_group), method="wilcox.test")
+
+# save plot
+pdf(file=paste0("figures/social_group/simpson_diversity.pdf"), width = 4, height=4)
+simpson.plot
+dev.off()
+
+```
+
+#Taxa presence analysis
+```{r}
+
+euk_file.long <- euks.social %>%
+  pivot_longer(
+    cols=-Sample_ID,
+    names_to="species",
+    values_to="presence"
+  )
+
+#add social group information
+euk_file.long.meta <- left_join(euk_file.long, euks.social.metadata %>% select(Sample_ID, Social_group))
+
+euk_file.long.counts <- euk_file.long.meta %>%
+  filter(presence=="1") %>%
+  group_by(Sample_ID, Social_group) %>%
+  summarise(n_euk=n())
+
+occurrences <- euk_file.long.counts %>%
+  ungroup()%>%
+  group_by(Social_group, n_euk) %>%
+  summarise(n_samples=n()) 
+
+#get n samples from each social group
+n_samples_viola <- dim(euks.social.metadata %>%
+  select(Social_group)%>%
+  filter(Social_group=="Viola"))[1]
+
+n_samples_mica <- dim(euks.social.metadata %>%
+  select(Social_group)%>%
+  filter(Social_group=="Mica"))[1]-1
+
+#calculate percentages
+occurrences.perc <- occurrences %>%
+  mutate(total=ifelse(Social_group=="Viola", n_samples_viola, n_samples_mica)) %>%
+  mutate(perc=n_samples*100/total)
+
+#plot
+perc.plot <- ggplot(occurrences.perc, aes(x=Social_group, y=perc, fill=n_euk))+
+  geom_bar(position="stack", stat="identity")+
+  theme_bw()+
+  scale_fill_continuous(type="viridis")+
+   labs(title = "N. eukaryotes per samples", x = "Social group", y = "Percentage of samples") 
+
+#save plot
+pdf(file=paste0("figures/social_group/stacked_bar_nEuk_perSample.pdf"), width = 3, height=3.5)
+perc.plot
+dev.off()
+
+```
+
+#Eukaryotes composition divided by social group
+```{r}
+
+euk_file.long.present <- euk_file.long.meta %>%
+  filter(presence=="1") %>%
+  select(Social_group, species)
+
+euk_file.long.present.occurrences <- euk_file.long.present %>%
+  group_by(Social_group, species)%>%
+  summarise(n_occurrences=n()) %>%
+  mutate(total=ifelse(Social_group=="Mica", n_samples_mica, n_samples_viola),
+                      perc=n_occurrences*100/total)
+
+#ordered barplot for Eukaryotes' counts across samples
+euk.bar.plot <- ggplot(euk_file.long.present.occurrences, aes(x=reorder(species, perc), y=perc, fill=Social_group))+
+  geom_bar(position=position_dodge(preserve="single"), stat='identity')+
+  theme_bw()+
+  scale_fill_manual(values=c("darkorange", "#6A27E1"), drop=FALSE)+
+  labs(title = "% of euk species per social group", 
+       x = "Social group", y = "Percentage of samples")+
+   ylim(0,100)+
+  coord_flip()
+  
+pdf(file=paste0("figures/social_group/grouped_bar_perc_perSpecies.pdf"), width = 8, height=3)
+euk.bar.plot
+dev.off()
+
+```
+
+#NMDS
+```{r}
+
+# Filter out samples with no species
+samples_with_species <- euks.social.clean %>%
+  filter(rowSums(euks.social.clean) > 0)
+
+# Perform NMDS
+nmds_result_filtered <- metaMDS(samples_with_species, dist = "bray")
+nmds_scores <- scores(nmds_result_filtered, display = "sites")
+
+# Create a new data frame by combining NMDS scores and 'socialgroup' based on row names
+nmds_df <- data.frame(
+  Sample_ID = rownames(nmds_scores),
+  NMDS1 = nmds_scores[, 1],  # Assuming NMDS1 is the first column
+  NMDS2 = nmds_scores[, 2]  # Assuming NMDS2 is the second column
+)
+
+# add social group information
+nmds_df.meta <- left_join(nmds_df, euks.social.metadata %>% select(Sample_ID, Social_group))
+
+# Define a color palette based on the levels of 'socialgroup'
+pal <- c("darkorange", "#6A27E1")  # Adjust colors as needed
+
+# Plot
+plot_nmds <- ggplot(nmds_df.meta, aes(x = NMDS1, y = NMDS2, color = Social_group)) +
+  geom_point(size = 3, alpha = 0.8) +
+  scale_color_manual(values = pal) +
+  stat_ellipse(linetype = 2, size = 1) +
+  labs(title = "NMDS") +
+  theme_minimal()
+
+# save plot
+pdf(file=paste0("figures/social_group/nmds_bray.pdf"), width = 6, height=4)
+plot_nmds
+dev.off()
+
+```
+
+
+#PERMANOVA Test
+```{r}
+
+bray_curtis_dist <- vegdist(samples_with_species[, 5:17], method = "bray")
+
+# Perform PERMANOVA
+permanova_result <- adonis(bray_curtis_dist ~ socialgroup + Age + sex, data = samples_with_species)
+
+# results
+permanova_table <- as.data.frame(permanova_result$aov.tab)
+
+```
