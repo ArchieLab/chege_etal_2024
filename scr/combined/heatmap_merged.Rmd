@@ -126,4 +126,43 @@ pdf(file=paste0("figures/combined/heatmap_euks_merged.pdf"), width=10, height=5)
 htm.euks.merged
 dev.off()
 
+
+#Mean & Standard deviation per eukaryotic taxa present across the datasets 
+
+#Pivot the taxonomic profile data to long format
+euk_file.long <- euks.merged %>%
+  pivot_longer(
+    cols = -Sample_ID,  # Keep Sample_ID as is, pivot all other columns
+    names_to = "species",  # Column for taxon names
+    values_to = "presence"  # Column for presence (1 or 0)
+  )
+
+# Merge with metadata for relevant information (Social group, Season, etc.)
+euk_file.long.meta <- left_join(euk_file.long, euks.merged.metadata.clean)
+
+# Filter the dataset to count the number of taxa (presence = 1) per sample
+euk_file.long.counts <- euk_file.long.meta %>%
+  filter(presence == "1") %>%  # Select only taxa present
+  group_by(Sample_ID) %>%  # Group by sample ID
+  summarise(n_euk = n())  # Count the number of present taxa per sample
+
+# Calculate the mean and standard deviation of the number of taxa present per sample
+mean_n_euk <- mean(euk_file.long.counts$n_euk)
+sd_n_euk <- sd(euk_file.long.counts$n_euk)
+
+# Print the results
+cat("Mean number of eukaryotes per sample: ", mean_n_euk, "\n")
+cat("Standard deviation of eukaryotes per sample: ", sd_n_euk, "\n")
+
+# mean and standard deviation separately for Social and Seasonal groups
+euk_file.long.counts %>%
+  left_join(euks.merged.metadata.clean %>% select(Sample_ID, Study)) %>%
+  group_by(Study) %>%
+  summarise(
+    mean_n_euk = mean(n_euk),
+    sd_n_euk = sd(n_euk)
+  ) -> study_summary
+
+# Print the summary for each study
+print(study_summary)
 ```
