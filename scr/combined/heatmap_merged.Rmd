@@ -127,7 +127,8 @@ htm.euks.merged
 dev.off()
 
 
-#Mean & Standard deviation per eukaryotic taxa present across the datasets 
+#Calculate Mean & Standard deviation per eukaryotic taxa present across the datasets 
+```{r}
 
 #Pivot the taxonomic profile data to long format
 euk_file.long <- euks.merged %>%
@@ -137,16 +138,16 @@ euk_file.long <- euks.merged %>%
     values_to = "presence"  # Column for presence (1 or 0)
   )
 
-# Merge with metadata for relevant information (Social group, Season, etc.)
+#Merge with metadata for relevant information (Social group, Season, etc.)
 euk_file.long.meta <- left_join(euk_file.long, euks.merged.metadata.clean)
 
-# Filter the dataset to count the number of taxa (presence = 1) per sample
+#Filter the dataset to count the number of taxa (presence = 1) per sample
 euk_file.long.counts <- euk_file.long.meta %>%
   filter(presence == "1") %>%  # Select only taxa present
   group_by(Sample_ID) %>%  # Group by sample ID
   summarise(n_euk = n())  # Count the number of present taxa per sample
 
-# Calculate the mean and standard deviation of the number of taxa present per sample
+#Calculate the mean and standard deviation of the number of taxa present per sample
 mean_n_euk <- mean(euk_file.long.counts$n_euk)
 sd_n_euk <- sd(euk_file.long.counts$n_euk)
 
@@ -154,7 +155,7 @@ sd_n_euk <- sd(euk_file.long.counts$n_euk)
 cat("Mean number of eukaryotes per sample: ", mean_n_euk, "\n")
 cat("Standard deviation of eukaryotes per sample: ", sd_n_euk, "\n")
 
-# mean and standard deviation separately for Social and Seasonal groups
+# Calculate mean and standard deviation separately for Social and Seasonal groups
 euk_file.long.counts %>%
   left_join(euks.merged.metadata.clean %>% select(Sample_ID, Study)) %>%
   group_by(Study) %>%
@@ -165,4 +166,4 @@ euk_file.long.counts %>%
 
 # Print the summary for each study
 print(study_summary)
-```
+
