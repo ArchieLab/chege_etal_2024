@@ -203,3 +203,34 @@ permanova_result <- adonis(bray_curtis_dist ~ socialgroup + Age + sex + Number.o
 permanova_table <- as.data.frame(permanova_result$aov.tab)
 
 ```
+#Grooming Network Analysis
+#import data
+viola_groom<-read.table("Viola_1yrgroom_forMantel.csv", header=F, sep=',')
+viola_jaccard<-read.table("Viola_jaccard_distance_matrix_forMantel.csv", header=F, sep=',')
+
+mica_groom<-read.table("Mica_1yrgroom_forMantel.csv", header=F, sep=',')
+mica_jaccard<-read.table("Mica_jaccard_distance_matrix_forMantel.csv", header=F, sep=',')
+
+# Convert to matrix
+viola_groom <- as.matrix(viola_groom)
+viola_jaccard <- as.matrix(viola_jaccard)
+
+mica_groom <- as.matrix(mica_groom)
+mica_jaccard <- as.matrix(mica_jaccard)
+
+# install vegan
+if (!require("vegan")) install.packages("vegan")
+library(vegan)
+
+# Run the Mantel test
+viola_mantel <- mantel(viola_groom, viola_jaccard)
+mica_mantel <- mantel(mica_groom, mica_jaccard)
+
+# Print the results
+print(viola_mantel)
+print(mica_mantel)
+
+# plot the results
+plot(viola_groom, viola_jaccard)
+plot(mica_groom, mica_jaccard)
+
