@@ -29,35 +29,44 @@ euks.social.metadata <- read_delim("data/metadata_social_group.csv", delim = ','
 
 ```
 
-#Alpha Diversity analysis - Simpson
+#Alpha Diversity analysis - Richness
 ```{r}
 
 euks.social.clean <- euks.social %>% 
   column_to_rownames("Sample_ID")
    
-# Simpson Diversity Index
-simpson_table <- as.data.frame(diversity(euks.social.clean, index = "simpson")) %>%
-  mutate(simpson_diversity=`diversity(euks.social.clean, index = "simpson")`) %>%
-  select(simpson_diversity) %>% 
-  rownames_to_column() %>% 
-  rename_with(.cols = 1, ~"Sample_ID")
+# Richness Diversity 
+# Compute richness (count of taxa present in each sample)
+richness <- rowSums(euks.social.clean > 0)
 
-simpson_table.social.meta <- left_join(simpson_table, euks.social.metadata %>% select(Sample_ID, Social_group))
+# Create richness table
+richness_table <- tibble(
+  Sample_ID = names(richness),
+  Richness = as.numeric(richness)
+)
+
+# Merge with metadata
+richness_table.social.meta <- left_join(richness_table, 
+                         euks.social.metadata %>% select(Sample_ID, Social_group),
+                                        by = "Sample_ID")
+
+# Define color palette
+colors <- c("darkorange", "#6A27E1")
 
 # Boxplot
-simpson.plot <- ggplot(simpson_table.social.meta, 
-       aes(x = Social_group, y = simpson_diversity, fill= Social_group)) +
+richness_plot <- ggplot(richness_table.social.meta, 
+                        aes(x = Social_group, y = Richness, fill = Social_group)) +
   geom_boxplot(alpha = 0.7, outlier.size = -1) +
-  labs(title = "Simpson Diversity Index Comparison",
-       y = "Simpson Diversity Index") +
-  theme_minimal()+
-  scale_fill_manual(values=c("darkorange", "#6A27E1"))+
-  #wilcoxon
-  stat_compare_means(aes(group=Social_group), method="wilcox.test")
+  labs(title = "Taxonomic Richness Comparison", y = "Taxonomic Richness") +
+  theme_minimal() +
+  scale_fill_manual(values = colors) +
+  annotate("text", x = 1.5, y = max(richness_table.social.meta$Richness), 
+           label = paste("p =", round(richness_p_value, 3)), size = 5, hjust = 0.5)
+print(richness_plot)
 
 # save plot
-pdf(file=paste0("figures/social_group/simpson_diversity.pdf"), width = 4, height=4)
-simpson.plot
+pdf(file=paste0("figures/social_group/taxonomic_richness_plot.pdf"), width = 4, height=4)
+richness.plot
 dev.off()
 
 ```
@@ -161,7 +170,7 @@ nmds_df <- data.frame(
 )
 
 # add social group information
-nmds_df.meta <- left_join(nmds_df, euks.social.metadata %>% select(Sample_ID, Social_group))
+nmds_df.meta <- left_join(nmds_df, euks.social.metadata %>% select(Sample_ID, Social_group, Sex, Age, Number.of.paired.end.sequences))
 
 # Define a color palette based on the levels of 'socialgroup'
 pal <- c("darkorange", "#6A27E1")  # Adjust colors as needed
@@ -188,7 +197,7 @@ dev.off()
 bray_curtis_dist <- vegdist(samples_with_species[, 5:17], method = "bray")
 
 # Perform PERMANOVA
-permanova_result <- adonis(bray_curtis_dist ~ socialgroup + Age + sex, data = samples_with_species)
+permanova_result <- adonis(bray_curtis_dist ~ socialgroup + Age + sex + Number.of.paierd-end.sequences, data = samples_with_species)
 
 # results
 permanova_table <- as.data.frame(permanova_result$aov.tab)
